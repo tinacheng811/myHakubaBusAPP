@@ -1,10 +1,10 @@
+%%writefile app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import numpy as np
 from PIL import Image
 import os
-import base64
 
 # ==========================================
 # ⚙️ 設定頁面
@@ -16,8 +16,28 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ⚠️ 修改點：移除 Google Drive 路徑，改為 "." (代表當前資料夾)
-IMAGE_BASE_PATH = "." 
+# ==========================================
+# 📂 自動路徑設定 (修正圖片讀取問題)
+# ==========================================
+# 優先嘗試 Colab Google Drive 路徑
+COLAB_PATH = "/content/drive/MyDrive/HakubaBus"
+# 其次嘗試當前目錄 (適用於 Streamlit Cloud 或本地上傳)
+LOCAL_PATH = "."
+
+if os.path.exists(COLAB_PATH):
+    IMAGE_BASE_PATH = COLAB_PATH
+else:
+    IMAGE_BASE_PATH = LOCAL_PATH
+
+# ==========================================
+# 🕒 時區設定 (關鍵修正！)
+# ==========================================
+# 定義日本時區 (UTC+9)
+JST = timezone(timedelta(hours=9))
+
+def get_japan_now():
+    """取得日本現在的時間與日期"""
+    return datetime.now(JST)
 
 # ==========================================
 # 🛠️ 工具函數
@@ -26,11 +46,19 @@ def create_schedule_df(data_dict):
     return pd.DataFrame(data_dict).set_index('Stop_Name')
 
 def parse_time(time_str):
+    """
+    將時刻表字串轉換為 datetime 物件
+    關鍵修正：強制使用 '日本現在的日期' 來組合時間，避免伺服器時區差異導致日期錯誤
+    """
     try:
+        japan_today = get_japan_now().date()
+        
         if isinstance(time_str, str):
-            return datetime.strptime(f"{datetime.now().date()} {time_str}", "%Y-%m-%d %H:%M")
+            # 修正點：使用 japan_today 而不是 datetime.now().date()
+            return datetime.strptime(f"{japan_today} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=JST)
         else:
-            return datetime.combine(datetime.now().date(), time_str)
+            # 如果傳入的是 time 物件 (手動選擇時間時)
+            return datetime.combine(japan_today, time_str).replace(tzinfo=JST)
     except (ValueError, TypeError):
         return None
 
@@ -125,44 +153,6 @@ image_map = {
     }
 }
 
-def image_to_html(filename, description):
-    try:
-        with open(filename, "rb") as f:
-            b64_img = base64.b64encode(f.read()).decode('utf-8')
-        
-        js_logic = """
-            var imgs = document.getElementsByClassName('schedule-img');
-            for(var i=0; i<imgs.length; i++) {
-                if(imgs[i] !== this) {
-                    imgs[i].style.width = '300px';
-                    imgs[i].style.cursor = 'zoom-in';
-                }
-            }
-            if(this.style.width=='100%'){
-                this.style.width='300px';
-                this.style.cursor='zoom-in';
-            } else {
-                this.style.width='100%';
-                this.style.cursor='zoom-out';
-            }
-        """.replace('\n', '')
-
-        html_str = f'''
-        <div style="margin: 10px; text-align: center; display: inline-block; vertical-align: top;">
-            <div style="font-weight: bold; margin-bottom: 5px; color: #555;">{description}</div>
-            <img src="data:image/webp;base64,{b64_img}" 
-                 class="schedule-img"
-                 style="width: 300px; cursor: zoom-in; border: 2px solid #ddd; border-radius: 8px; box-shadow: 3px 3px 8px rgba(0,0,0,0.1); transition: width 0.3s ease;" 
-                 onclick="{js_logic}" 
-                 title="點擊圖片放大"
-            />
-            <div style="font-size: 12px; color: #999; margin-top: 3px;">(點擊放大/縮小)</div>
-        </div>
-        '''
-        return html_str
-    except FileNotFoundError:
-        return f"<div style='color:red; margin:10px;'>⚠️ 找不到圖片：{filename}</div>"
-
 # ==========================================
 # 🧠 核心搜尋邏輯
 # ==========================================
@@ -226,6 +216,10 @@ def find_bus_universal(route_selection, start_stop, end_stop, current_time):
             if pd.isna(start_t) or pd.isna(end_t): continue
             
             bus_time = parse_time(start_t)
+            # 因為 parse_time 已經包含 JST 時區，所以 current_time 也要確保有時區
+            if current_time.tzinfo is None:
+                current_time = current_time.replace(tzinfo=JST)
+
             if bus_time > current_time:
                 wait_time = (bus_time - current_time).seconds // 60
                 
@@ -258,7 +252,6 @@ with st.container():
     with col2:
         is_use_now = st.checkbox("使用現在時間", value=True)
     
-    # 動態更新站點邏輯
     if route_mode.startswith("🔍"):
         current_stops = all_stops_combined
     else:
@@ -270,21 +263,27 @@ with st.container():
     
     col3, col4 = st.columns(2)
     with col3:
-        start_stop = st.selectbox("起點", current_stops, index=current_stops.index('白馬ハイランドホテル(Hakuba Highland Hotel)') if '白馬ハイランドホテル(Hakuba Highland Hotel)' in current_stops else 0)
+        # 自動搜尋最佳站點 index (避免報錯)
+        default_start = '白馬ハイランドホテル(Hakuba Highland Hotel)'
+        default_end = 'エイブル白馬五竜いいもり(Goryu Iimori)'
+        
+        idx_start = current_stops.index(default_start) if default_start in current_stops else 0
+        idx_end = current_stops.index(default_end) if default_end in current_stops else 0
+        
+        start_stop = st.selectbox("起點", current_stops, index=idx_start)
     with col4:
-        end_stop = st.selectbox("終點", current_stops, index=current_stops.index('エイブル白馬五竜いいもり(Goryu Iimori)') if 'エイブル白馬五竜いいもり(Goryu Iimori)' in current_stops else 0)
+        end_stop = st.selectbox("終點", current_stops, index=idx_end)
 
-    # ⏳ 時間選擇修復區 (使用 session_state 避免跳動)
+    # ⏳ 時間選擇修復區
     if 'manual_time_setting' not in st.session_state:
-        st.session_state.manual_time_setting = datetime.now().time()
+        st.session_state.manual_time_setting = datetime.now(JST).time()
 
     if not is_use_now:
         selected_time = st.time_input("選擇出發時間", key='manual_time_setting')
-        search_time = datetime.combine(datetime.now().date(), selected_time)
+        # 結合日期時，使用 Japan Today
+        search_time = datetime.combine(get_japan_now().date(), selected_time).replace(tzinfo=JST)
     else:
-        # UTC+9 Japan Time
-        search_time = datetime.now(timezone.utc) + timedelta(hours=9)
-        search_time = search_time.replace(tzinfo=None) # Remove tz for comparison
+        search_time = get_japan_now()
         st.info(f"🕒 日本現在時間：{search_time.strftime('%H:%M')}")
 
 # 2. 搜尋按鈕與結果
@@ -299,11 +298,9 @@ if st.button("🔍 搜尋班次", use_container_width=True, type="primary"):
         has_estimated = False
         for i, bus in enumerate(results[:5]):
             with st.container():
-                # 使用 Streamlit 的卡片式排版
                 cols = st.columns([1, 2, 2])
                 cols[0].metric(label="路線", value=bus['Route'])
                 
-                # 處理顯示字串 (針對 F6/G7 無時刻站點)
                 if bus.get('Is_Unknown_Start'):
                     dep_val = "現場確認"
                     wait_val = "請提早候車"
@@ -324,7 +321,7 @@ if st.button("🔍 搜尋班次", use_container_width=True, type="primary"):
         if has_estimated:
             st.warning("⚠️ 注意：F6/G7 路線部分站點為按鈴停靠，時間為推估值，請務必提早候車。")
 
-# 3. 圖片顯示區 (手風琴效果)
+# 3. 圖片顯示區
 with st.expander("📷 查看時刻表原圖 (點擊展開)"):
     if route_mode.startswith("🔍"):
         st.info("請先在上方選擇「單一路線」，即可在此查看該路線的原始時刻表。")
