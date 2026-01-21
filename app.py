@@ -1,4 +1,4 @@
-import streamlit as st
+%%writefile app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -16,27 +16,20 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==========================================
-# 📂 自動路徑設定 (修正圖片讀取問題)
-# ==========================================
-# 優先嘗試 Colab Google Drive 路徑
+# 自動路徑設定
 COLAB_PATH = "/content/drive/MyDrive/HakubaBus"
-# 其次嘗試當前目錄 (適用於 Streamlit Cloud 或本地上傳)
 LOCAL_PATH = "."
-
 if os.path.exists(COLAB_PATH):
     IMAGE_BASE_PATH = COLAB_PATH
 else:
     IMAGE_BASE_PATH = LOCAL_PATH
 
 # ==========================================
-# 🕒 時區設定 (關鍵修正！)
+# 🕒 時區設定
 # ==========================================
-# 定義日本時區 (UTC+9)
 JST = timezone(timedelta(hours=9))
 
 def get_japan_now():
-    """取得日本現在的時間與日期"""
     return datetime.now(JST)
 
 # ==========================================
@@ -46,18 +39,11 @@ def create_schedule_df(data_dict):
     return pd.DataFrame(data_dict).set_index('Stop_Name')
 
 def parse_time(time_str):
-    """
-    將時刻表字串轉換為 datetime 物件
-    關鍵修正：強制使用 '日本現在的日期' 來組合時間，避免伺服器時區差異導致日期錯誤
-    """
     try:
         japan_today = get_japan_now().date()
-        
         if isinstance(time_str, str):
-            # 修正點：使用 japan_today 而不是 datetime.now().date()
             return datetime.strptime(f"{japan_today} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=JST)
         else:
-            # 如果傳入的是 time 物件 (手動選擇時間時)
             return datetime.combine(japan_today, time_str).replace(tzinfo=JST)
     except (ValueError, TypeError):
         return None
@@ -216,7 +202,6 @@ def find_bus_universal(route_selection, start_stop, end_stop, current_time):
             if pd.isna(start_t) or pd.isna(end_t): continue
             
             bus_time = parse_time(start_t)
-            # 因為 parse_time 已經包含 JST 時區，所以 current_time 也要確保有時區
             if current_time.tzinfo is None:
                 current_time = current_time.replace(tzinfo=JST)
 
@@ -248,12 +233,10 @@ st.caption("Hakuba Valley Shuttle Bus App")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        # 路線選擇保留 selectbox，因為選項少且通常需要搜尋
         route_mode = st.selectbox("選擇路線", ["🔍 所有路線 (智慧搜尋)"] + list(bus_network.keys()))
     with col2:
         is_use_now = st.checkbox("使用現在時間", value=True)
     
-    # 動態更新站點邏輯
     if route_mode.startswith("🔍"):
         current_stops = all_stops_combined
     else:
@@ -263,47 +246,65 @@ with st.container():
         else:
             current_stops = route_data["stops"]
     
-    # 自動搜尋最佳站點 index
+    # Index calculations
     default_start = '白馬ハイランドホテル(Hakuba Highland Hotel)'
     default_end = 'エイブル白馬五竜いいもり(Goryu Iimori)'
-    
-    # 這裡的 index 邏輯保留，給 radio 使用
     idx_start = current_stops.index(default_start) if default_start in current_stops else 0
     idx_end = current_stops.index(default_end) if default_end in current_stops else 0
     
-    # --- 📱 手機版面優化重點開始 ---
-    # 使用 popover (彈出視窗) + radio (單選) 取代 selectbox
-    # 這樣手機點擊時，只會跳出選單，不會觸發鍵盤
-    
     col3, col4 = st.columns(2)
     with col3:
-        # 顯示目前的選擇，讓使用者知道選了什麼
+        # 顯示標題
         st.caption("🚩 起點")
         with st.popover("點擊選擇起點", use_container_width=True):
-            start_stop = st.radio(
-                "起點列表", 
-                current_stops, 
-                index=idx_start, 
-                key="start_stop_radio",
-                label_visibility="collapsed" # 隱藏內部標題讓版面更緊湊
-            )
-        # 在按鈕下方顯示目前選到的站點 (縮短顯示以免跑版)
-        st.write(f"**{start_stop.split('(')[0]}**")
+            start_stop = st.radio("起點列表", current_stops, index=idx_start, key="start_radio", label_visibility="collapsed")
+        
+        # ✅ 字體優化 (使用 HTML 取代 st.write)
+        display_text = start_stop.split('(')[0]
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #f0f2f6;
+                padding: 8px;
+                border-radius: 5px;
+                font-size: 18px;
+                font-weight: bold;
+                color: #31333F;
+                text-align: center;
+                border: 1px solid #d6d6d6;
+            ">
+                {display_text}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     with col4:
         st.caption("🏁 終點")
         with st.popover("點擊選擇終點", use_container_width=True):
-            end_stop = st.radio(
-                "終點列表", 
-                current_stops, 
-                index=idx_end, 
-                key="end_stop_radio",
-                label_visibility="collapsed"
-            )
-        st.write(f"**{end_stop.split('(')[0]}**")
+            end_stop = st.radio("終點列表", current_stops, index=idx_end, key="end_radio", label_visibility="collapsed")
+        
+        # ✅ 字體優化
+        display_text_end = end_stop.split('(')[0]
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #f0f2f6;
+                padding: 8px;
+                border-radius: 5px;
+                font-size: 18px;
+                font-weight: bold;
+                color: #31333F;
+                text-align: center;
+                border: 1px solid #d6d6d6;
+            ">
+                {display_text_end}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
     
-    st.markdown("---") # 分隔線
-    # --- 📱 手機版面優化重點結束 ---
+    st.markdown("---")
 
     # ⏳ 時間選擇修復區
     if 'manual_time_setting' not in st.session_state:
