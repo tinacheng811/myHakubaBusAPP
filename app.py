@@ -229,6 +229,15 @@ def find_bus_universal(route_selection, start_stop, end_stop, current_time):
 st.title("🚌 白馬滑雪公車")
 st.caption("Hakuba Valley Shuttle Bus App")
 
+# --- 🔄 交換起訖點的邏輯函數 ---
+def swap_locations():
+    """交換 Session State 中的起點與終點"""
+    # 檢查是否已存在選擇 (避免第一次執行報錯)
+    if "start_radio" in st.session_state and "end_radio" in st.session_state:
+        # 交換變數
+        st.session_state.start_radio, st.session_state.end_radio = \
+        st.session_state.end_radio, st.session_state.start_radio
+
 # 1. 查詢設定
 with st.container():
     col1, col2 = st.columns(2)
@@ -237,6 +246,7 @@ with st.container():
     with col2:
         is_use_now = st.checkbox("使用現在時間", value=True)
     
+    # 動態更新站點邏輯
     if route_mode.startswith("🔍"):
         current_stops = all_stops_combined
     else:
@@ -246,61 +256,44 @@ with st.container():
         else:
             current_stops = route_data["stops"]
     
-    # Index calculations
+    # 設定預設值 (僅在第一次或重置時生效)
     default_start = '白馬ハイランドホテル(Hakuba Highland Hotel)'
     default_end = 'エイブル白馬五竜いいもり(Goryu Iimori)'
+    
     idx_start = current_stops.index(default_start) if default_start in current_stops else 0
     idx_end = current_stops.index(default_end) if default_end in current_stops else 0
     
-    col3, col4 = st.columns(2)
-    with col3:
-        # 顯示標題
+    # --- 📱 修改重點：三欄式佈局 (左:起點 / 中:交換鈕 / 右:終點) ---
+    c_start, c_swap, c_end = st.columns([10, 2, 10], vertical_alignment="bottom") 
+    # vertical_alignment="bottom" 讓按鈕對齊下方，不會因為標題高度而跑版
+    
+    with c_start:
         st.caption("🚩 起點")
-        with st.popover("點擊選擇起點", use_container_width=True):
+        with st.popover("選擇起點", use_container_width=True):
             start_stop = st.radio("起點列表", current_stops, index=idx_start, key="start_radio", label_visibility="collapsed")
         
-        # ✅ 字體優化 (使用 HTML 取代 st.write)
+        # 顯示選擇結果 (HTML樣式)
         display_text = start_stop.split('(')[0]
         st.markdown(
-            f"""
-            <div style="
-                background-color: #f0f2f6;
-                padding: 8px;
-                border-radius: 5px;
-                font-size: 18px;
-                font-weight: bold;
-                color: #31333F;
-                text-align: center;
-                border: 1px solid #d6d6d6;
-            ">
-                {display_text}
-            </div>
-            """,
+            f"""<div style="background-color:#f0f2f6;padding:8px;border-radius:5px;font-size:16px;font-weight:bold;color:#31333F;text-align:center;border:1px solid #d6d6d6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{display_text}</div>""",
             unsafe_allow_html=True
         )
 
-    with col4:
+    with c_swap:
+        # 交換按鈕 (綁定上面的函數)
+        st.button("↔️", on_click=swap_locations, use_container_width=True, help="交換起點與終點")
+        # 加一個空白行稍微墊高顯示結果，對齊左右
+        st.write("") 
+
+    with c_end:
         st.caption("🏁 終點")
-        with st.popover("點擊選擇終點", use_container_width=True):
+        with st.popover("選擇終點", use_container_width=True):
             end_stop = st.radio("終點列表", current_stops, index=idx_end, key="end_radio", label_visibility="collapsed")
         
-        # ✅ 字體優化
+        # 顯示選擇結果 (HTML樣式)
         display_text_end = end_stop.split('(')[0]
         st.markdown(
-            f"""
-            <div style="
-                background-color: #f0f2f6;
-                padding: 8px;
-                border-radius: 5px;
-                font-size: 18px;
-                font-weight: bold;
-                color: #31333F;
-                text-align: center;
-                border: 1px solid #d6d6d6;
-            ">
-                {display_text_end}
-            </div>
-            """,
+            f"""<div style="background-color:#f0f2f6;padding:8px;border-radius:5px;font-size:16px;font-weight:bold;color:#31333F;text-align:center;border:1px solid #d6d6d6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{display_text_end}</div>""",
             unsafe_allow_html=True
         )
     
