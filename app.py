@@ -229,14 +229,13 @@ def find_bus_universal(route_selection, start_stop, end_stop, current_time):
 st.title("🚌 白馬滑雪公車")
 st.caption("Hakuba Valley Shuttle Bus App")
 
-# --- 🔄 交換起訖點的邏輯函數 ---
+# --- 🔄 交換起訖點的邏輯函數 (配合 selectbox 修改) ---
 def swap_locations():
     """交換 Session State 中的起點與終點"""
-    # 檢查是否已存在選擇 (避免第一次執行報錯)
-    if "start_radio" in st.session_state and "end_radio" in st.session_state:
-        # 交換變數
-        st.session_state.start_radio, st.session_state.end_radio = \
-        st.session_state.end_radio, st.session_state.start_radio
+    # 注意：這裡的 key 必須跟下面 selectbox 的 key 一致
+    if "start_select" in st.session_state and "end_select" in st.session_state:
+        st.session_state.start_select, st.session_state.end_select = \
+        st.session_state.end_select, st.session_state.start_select
 
 # 1. 查詢設定
 with st.container():
@@ -256,45 +255,37 @@ with st.container():
         else:
             current_stops = route_data["stops"]
     
-    # 設定預設值 (僅在第一次或重置時生效)
+    # 設定預設值 (計算 Index)
     default_start = '白馬ハイランドホテル(Hakuba Highland Hotel)'
     default_end = 'エイブル白馬五竜いいもり(Goryu Iimori)'
     
     idx_start = current_stops.index(default_start) if default_start in current_stops else 0
     idx_end = current_stops.index(default_end) if default_end in current_stops else 0
     
-    # --- 📱 修改重點：三欄式佈局 (左:起點 / 中:交換鈕 / 右:終點) ---
+    # --- 📱 修改重點：回歸 Selectbox (下拉選單) ---
+    # 使用三欄佈局保持交換按鈕的位置
     c_start, c_swap, c_end = st.columns([10, 2, 10], vertical_alignment="bottom") 
-    # vertical_alignment="bottom" 讓按鈕對齊下方，不會因為標題高度而跑版
     
     with c_start:
-        st.caption("🚩 起點")
-        with st.popover("選擇起點", use_container_width=True):
-            start_stop = st.radio("起點列表", current_stops, index=idx_start, key="start_radio", label_visibility="collapsed")
-        
-        # 顯示選擇結果 (HTML樣式)
-        display_text = start_stop.split('(')[0]
-        st.markdown(
-            f"""<div style="background-color:#f0f2f6;padding:8px;border-radius:5px;font-size:16px;font-weight:bold;color:#31333F;text-align:center;border:1px solid #d6d6d6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{display_text}</div>""",
-            unsafe_allow_html=True
+        start_stop = st.selectbox(
+            "🚩 起點", 
+            current_stops, 
+            index=idx_start, 
+            key="start_select" # 設定 key 讓交換功能抓取
         )
 
     with c_swap:
-        # 交換按鈕 (綁定上面的函數)
-        st.button("↔️", on_click=swap_locations, use_container_width=True, help="交換起點與終點")
-        # 加一個空白行稍微墊高顯示結果，對齊左右
+        # 交換按鈕
+        st.button("↔️", on_click=swap_locations, use_container_width=True)
+        # 稍微墊高一點，讓按鈕跟下拉選單對齊
         st.write("") 
 
     with c_end:
-        st.caption("🏁 終點")
-        with st.popover("選擇終點", use_container_width=True):
-            end_stop = st.radio("終點列表", current_stops, index=idx_end, key="end_radio", label_visibility="collapsed")
-        
-        # 顯示選擇結果 (HTML樣式)
-        display_text_end = end_stop.split('(')[0]
-        st.markdown(
-            f"""<div style="background-color:#f0f2f6;padding:8px;border-radius:5px;font-size:16px;font-weight:bold;color:#31333F;text-align:center;border:1px solid #d6d6d6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{display_text_end}</div>""",
-            unsafe_allow_html=True
+        end_stop = st.selectbox(
+            "🏁 終點", 
+            current_stops, 
+            index=idx_end, 
+            key="end_select" # 設定 key 讓交換功能抓取
         )
     
     st.markdown("---")
