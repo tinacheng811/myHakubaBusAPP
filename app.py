@@ -248,10 +248,12 @@ st.caption("Hakuba Valley Shuttle Bus App")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
+        # 路線選擇保留 selectbox，因為選項少且通常需要搜尋
         route_mode = st.selectbox("選擇路線", ["🔍 所有路線 (智慧搜尋)"] + list(bus_network.keys()))
     with col2:
         is_use_now = st.checkbox("使用現在時間", value=True)
     
+    # 動態更新站點邏輯
     if route_mode.startswith("🔍"):
         current_stops = all_stops_combined
     else:
@@ -261,18 +263,47 @@ with st.container():
         else:
             current_stops = route_data["stops"]
     
+    # 自動搜尋最佳站點 index
+    default_start = '白馬ハイランドホテル(Hakuba Highland Hotel)'
+    default_end = 'エイブル白馬五竜いいもり(Goryu Iimori)'
+    
+    # 這裡的 index 邏輯保留，給 radio 使用
+    idx_start = current_stops.index(default_start) if default_start in current_stops else 0
+    idx_end = current_stops.index(default_end) if default_end in current_stops else 0
+    
+    # --- 📱 手機版面優化重點開始 ---
+    # 使用 popover (彈出視窗) + radio (單選) 取代 selectbox
+    # 這樣手機點擊時，只會跳出選單，不會觸發鍵盤
+    
     col3, col4 = st.columns(2)
     with col3:
-        # 自動搜尋最佳站點 index (避免報錯)
-        default_start = '白馬ハイランドホテル(Hakuba Highland Hotel)'
-        default_end = 'エイブル白馬五竜いいもり(Goryu Iimori)'
-        
-        idx_start = current_stops.index(default_start) if default_start in current_stops else 0
-        idx_end = current_stops.index(default_end) if default_end in current_stops else 0
-        
-        start_stop = st.selectbox("起點", current_stops, index=idx_start)
+        # 顯示目前的選擇，讓使用者知道選了什麼
+        st.caption("🚩 起點")
+        with st.popover("點擊選擇起點", use_container_width=True):
+            start_stop = st.radio(
+                "起點列表", 
+                current_stops, 
+                index=idx_start, 
+                key="start_stop_radio",
+                label_visibility="collapsed" # 隱藏內部標題讓版面更緊湊
+            )
+        # 在按鈕下方顯示目前選到的站點 (縮短顯示以免跑版)
+        st.write(f"**{start_stop.split('(')[0]}**")
+
     with col4:
-        end_stop = st.selectbox("終點", current_stops, index=idx_end)
+        st.caption("🏁 終點")
+        with st.popover("點擊選擇終點", use_container_width=True):
+            end_stop = st.radio(
+                "終點列表", 
+                current_stops, 
+                index=idx_end, 
+                key="end_stop_radio",
+                label_visibility="collapsed"
+            )
+        st.write(f"**{end_stop.split('(')[0]}**")
+    
+    st.markdown("---") # 分隔線
+    # --- 📱 手機版面優化重點結束 ---
 
     # ⏳ 時間選擇修復區
     if 'manual_time_setting' not in st.session_state:
@@ -280,7 +311,6 @@ with st.container():
 
     if not is_use_now:
         selected_time = st.time_input("選擇出發時間", key='manual_time_setting')
-        # 結合日期時，使用 Japan Today
         search_time = datetime.combine(get_japan_now().date(), selected_time).replace(tzinfo=JST)
     else:
         search_time = get_japan_now()
