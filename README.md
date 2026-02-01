@@ -1,4 +1,4 @@
 # myHakubaBusAPP
 ※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※<br>
-⚠️This program is for personal interest and practice only.<br>
+⚠️This program is for personal use and practice only.<br>
 ※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※<br>
